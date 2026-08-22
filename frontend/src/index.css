@@ -1,0 +1,127 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --accent-hue: 220;
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8f9fa;
+  --bg-tertiary: #f1f3f5;
+  --bg-elevated: #ffffff;
+  --text-primary: #1a1a2e;
+  --text-secondary: #4a4a5a;
+  --text-tertiary: #8a8a9a;
+  --text-muted: #b0b0bc;
+  --border-color: #e8e8ef;
+  --danger: #ef4444;
+  --success: #22c55e;
+  --warning: #f59e0b;
+}
+
+.dark {
+  --bg-primary: #0f0f1a;
+  --bg-secondary: #161622;
+  --bg-tertiary: #1e1e2e;
+  --bg-elevated: #1a1a2a;
+  --text-primary: #f0f0f5;
+  --text-secondary: #b0b0c0;
+  --text-tertiary: #6a6a7a;
+  --text-muted: #4a4a5a;
+  --border-color: #2a2a3a;
+}
+
+@layer base {
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--text-muted) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background-color: var(--text-muted);
+    border-radius: 3px;
+  }
+}
+
+@layer components {
+  .input-field {
+    @apply w-full px-3 py-2.5 rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] text-sm text-[var(--text-primary)] outline-none transition-colors;
+  }
+  .input-field:focus {
+    border-color: var(--text-tertiary);
+  }
+
+  .btn-primary {
+    @apply w-full py-2.5 px-4 rounded-xl text-sm font-medium transition-opacity;
+    background-color: var(--text-primary);
+    color: var(--bg-primary);
+  }
+  .btn-primary:hover {
+    opacity: 0.9;
+  }
+
+  .icon-btn {
+    @apply w-8 h-8 flex items-center justify-center rounded-lg transition-colors text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)];
+  }
+
+  .sidebar-item {
+    @apply flex items-center gap-2.5 px-2 py-2 rounded-xl cursor-pointer transition-colors text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)];
+  }
+  .sidebar-item.active {
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+  }
+
+  .msg-bubble-user {
+    @apply px-4 py-3 rounded-2xl rounded-tr-sm text-sm leading-relaxed max-w-prose text-white;
+    background-color: var(--text-primary);
+  }
+
+  .msg-bubble-bot {
+    @apply px-4 py-3 rounded-2xl rounded-tl-sm text-sm leading-relaxed max-w-prose text-[var(--text-primary)] bg-[var(--bg-secondary)] border border-[var(--border-color)];
+  }
+
+  .emotion-badge {
+    @apply flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium;
+  }
+
+  .toggle-track {
+    @apply relative w-9 h-5 rounded-full cursor-pointer transition-colors bg-[var(--bg-tertiary)] border border-[var(--border-color)];
+  }
+  .toggle-track.on {
+    background-color: var(--text-primary);
+    border-color: var(--text-primary);
+  }
+  .toggle-thumb {
+    @apply absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-[var(--text-muted)] transition-transform;
+  }
+  .toggle-track.on .toggle-thumb {
+    transform: translateX(16px);
+    background-color: var(--bg-primary);
+  }
+
+  .color-swatch {
+    @apply w-5 h-5 rounded-full cursor-pointer transition-transform hover:scale-110 ring-offset-2;
+  }
+  .color-swatch.active {
+    @apply ring-2;
+    ring-color: var(--text-primary);
+  }
+}
