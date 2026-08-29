@@ -1,4 +1,4 @@
-# Emotion-Aware Chatbot with Context Memory
+# An Emotion-Aware Conversational AI system with Tired and Multi-Label Affective Memory
 
 A sophisticated chatbot application that detects and responds to user emotions while maintaining conversation context and memory. This project combines natural language processing with emotional intelligence to create more empathetic and responsive interactions.
 
