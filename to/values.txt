@@ -1,0 +1,74 @@
+1  | Situational tier half-life
+
+2  | Short-term tier half-life
+
+3  | Long-term tier half-life
+
+4  | Situational tier learning rate
+
+5  | Short-term tier learning rate
+
+6  | Long-term tier learning rate
+
+7  | Neutral floor for VAD magnitude
+
+8  | Situational confidence gate (γ\_sit)
+
+9  | Short-term confidence gate (γ\_short)
+
+10 | Long-term confidence gate (γ\_long)
+
+11 | Rolling window size
+
+12 | Directional agreement threshold (τ)
+
+13 | Short-term support requirement
+
+14 | Long-term support requirement
+
+15 | Long-term baseline adaptation rate (α)
+
+16 | Situational spike threshold (θ\_spike)
+
+17 | Emotional-memory write: change magnitude
+
+ 18 | Emotional-memory write: confidence
+
+ 19 | Emotional-memory cooldown
+
+20 | Memory importance: Δ weight
+
+21 | Memory importance: confidence weight
+
+22 | Memory importance: base offset
+
+23 | Hybrid score: semantic weight (w\_s)
+
+24 | Hybrid score: recency weight (w\_r)
+
+25 | Hybrid score: importance weight (w\_i)
+
+26 | Recency half-life (h\_r)
+
+27 | Maximum memories returned
+
+28 | Hybrid score discard threshold
+
+29 | Candidate over-fetch factor
+
+ 30 | Model context budget
+
+31 | Response reservation
+
+32 | Derived context budget (B)
+
+33 | Memory token cap
+
+34 | System prompt token cap
+
+35 | Affective-state token cap
+
+ 36 | In-memory history soft cap
+
+37 | Summary memory importance
+
