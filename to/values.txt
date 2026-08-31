@@ -1,3 +1,39 @@
+All 37 — answered from what we have
+✅ Full certainty — directly in code or JSON output
+#	Hyperparameter	Value	Evidence
+1	Situational half-life	300 s	EmotionManagerConfig.situational_half_life = 300.0
+2	Short-term half-life	2700 s (45 min)	EmotionManagerConfig.stm_half_life = 2_700.0
+3	Long-term half-life	259200 s (3 days)	EmotionManagerConfig.ltm_half_life = 259_200.0
+4	Situational LR	0.70	EmotionManagerConfig.situational_lr = 0.70
+5	Short-term LR	0.35	EmotionManagerConfig.stm_lr = 0.35
+6	Long-term LR	0.12	EmotionManagerConfig.ltm_lr = 0.12
+7	Neutral magnitude floor	0.12	NEUTRAL_MAGNITUDE_FLOOR: float = 0.12
+8	γ_sit	0.15	EmotionManagerConfig.situational_min_confidence = 0.15
+9	γ_short	0.45	EmotionManagerConfig.stm_min_confidence = 0.45 — confirmed as default by sensitivity_confidence_gate.json — STM rate 0.1525 at this gate
+10	γ_long	0.60	EmotionManagerConfig.ltm_min_confidence = 0.60
+11	Rolling window size	12	EmotionManagerConfig.signal_window = 12
+12	Agreement threshold τ	0.25	EmotionManagerConfig.agreement_threshold = 0.25
+13	STM support requirement	2	EmotionManagerConfig.sustained_support = 2
+14	LTM support requirement	3	EmotionManagerConfig.ltm_support = 3
+15	Baseline adaptation rate α	0.03	EmotionManagerConfig.baseline_alpha = 0.03
+16	Spike threshold θ_spike	0.25	EmotionManagerConfig.spike_delta = 0.25
+17	Memory write: min Δ magnitude	0.35	EmotionalMemoryWriter(min_magnitude=0.35)
+18	Memory write: min confidence	0.55	EmotionalMemoryWriter(min_confidence=0.55)
+19	Memory write: cooldown	300 s	EmotionalMemoryWriter(cooldown_seconds=300.0)
+20	Importance: Δ weight	0.4	importance = clamp(0.4 + 0.4*Δmag + 0.2*conf) — both tex files include this formula
+21	Importance: confidence weight	0.2	same formula
+22	Importance: base offset	0.4	same formula
+✅ Confirmed by ablation output (JSON + LaTeX results)
+#	Hyperparameter	Value	Evidence
+9 (extended)	γ_short effect at default	15.25% STM admission rate	sensitivity_confidence_gate.json row γ=0.45: mean=0.1525 ±0.0773, CI [0.1186, 0.1864]
+1–3 (extended)	Multiplier effect on situational intensity	Monotonically 0.121→0.555 across 0.25×–8×	ablation_halflife_real.json per-turn intensities, confirmed in ablation_study.tex Table 3
+7 (extended)	Floor confirmed behaviorally	Situational tier activates from turn 0 with intensity 0.079 at 1×	JSON per_turn_sit_intensity[0] = 0.079 — above floor, so VAD was non-neutral
+
+
+
+
+
+
 1  | Situational tier half-life
 
 2  | Short-term tier half-life
