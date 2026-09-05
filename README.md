@@ -23,7 +23,6 @@ Emotion-Aware-Detection-/
 
 - **Frontend**: Web-based user interface for chatbot interaction
 - **Backend**: Server-side logic for emotion detection and response generation
-- **NLP**: Natural language processing for emotion analysis
 
 ## 🚀 Getting Started
 
@@ -89,48 +88,4 @@ The chatbot can detect and respond to various emotions:
 - 😌 Calm
 - And more...
 
-## 📖 Documentation
 
-For detailed documentation on:
-- API endpoints and usage
-- Emotion detection algorithms
-- Configuration options
-- Deployment instructions
-
-Please refer to the respective README files in the `backend/` and `frontend/` directories.
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to:
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
-## 📝 License
-
-This project is currently unlicensed. Feel free to add a license of your choice.
-
-## 👤 Author
-
-**Sujeet Sah**
-- GitHub: [@sujeet-sah-748](https://github.com/sujeet-sah-748)
-
-## 🙏 Acknowledgments
-
-- Thanks to all contributors and the open-source community
-- Special thanks to NLP and AI communities for inspiration
-
-## 📞 Support
-
-If you have any questions or issues, please:
-1. Check existing [Issues](https://github.com/sujeet-sah-748/Emotion-Aware-Detection-/issues)
-2. Create a new issue with detailed description
-3. Feel free to reach out through GitHub discussions
-
----
-
-**Last Updated**: 2026-08-22
-
-Happy coding! 🚀
