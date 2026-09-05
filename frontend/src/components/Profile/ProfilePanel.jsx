@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useSelector, useDispatch } from 'react-redux'
+import { useNavigate } from 'react-router-dom'
 import { clearAllChats } from '../../store/slices/chatSlice'
 import { updateProfile, logout } from '../../store/slices/authSlice'
 import { emotionColors } from '../../utils/emotionColors'
@@ -8,6 +9,7 @@ import Icon from '../common/Icon'
 
 export default function ProfilePanel({ onBack }) {
   const dispatch = useDispatch()
+  const navigate = useNavigate()
   const user = useSelector(state => state.auth.user)
   const { chats } = useSelector(state => state.chat)
   const [editingName, setEditingName] = useState(false)
@@ -34,6 +36,7 @@ export default function ProfilePanel({ onBack }) {
 
   const handleLogout = () => {
     dispatch(logout())
+    navigate('/login')
   }
 
   return (

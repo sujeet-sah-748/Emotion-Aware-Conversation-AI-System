@@ -5,3 +5,9 @@ torch
 numpy
 transformers
 peft
+chromadb
+redis
+hiredis
+mem0ai
+qdrant-client
+requests

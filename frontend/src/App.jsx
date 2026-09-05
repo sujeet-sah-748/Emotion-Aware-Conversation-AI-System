@@ -11,6 +11,7 @@ import RegisterForm from './components/Auth/RegisterForm'
 import SettingsPanel from './components/Settings/SettingsPanel'
 import ProfilePanel from './components/Profile/ProfilePanel'
 import Icon from './components/common/Icon'
+import ErrorBoundary from './components/common/ErrorBoundary'
 
 function AuthPage() {
   const [mode, setMode] = useState('login')
@@ -46,13 +47,17 @@ function MainLayout() {
   const dispatch = useDispatch()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [currentPanel, setCurrentPanel] = useState(null) // null | 'settings' | 'profile'
+  const [initializing, setInitializing] = useState(true)
   const { isAuthenticated } = useSelector(state => state.auth)
   const settings = useSelector(state => state.settings)
 
   useEffect(() => {
     dispatch(loadSettings())
     applyThemeToDom(settings)
-  }, [dispatch])
+    // Simulate initial auth check delay
+    const timer = setTimeout(() => setInitializing(false), 100)
+    return () => clearTimeout(timer)
+  }, [dispatch, settings])
 
   const handleNavigate = (target) => {
     if (target === 'logout') {
@@ -66,6 +71,14 @@ function MainLayout() {
 
   const handleBack = () => {
     setCurrentPanel(null)
+  }
+
+  if (initializing) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-[var(--bg-primary)]">
+        <div className="w-8 h-8 border-2 border-[var(--text-muted)] border-t-[var(--text-primary)] rounded-full animate-spin" />
+      </div>
+    )
   }
 
   if (!isAuthenticated) {
@@ -105,9 +118,11 @@ function MainLayout() {
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/login" element={<AuthPage />} />
-      <Route path="/*" element={<MainLayout />} />
-    </Routes>
+    <ErrorBoundary>
+      <Routes>
+        <Route path="/login" element={<AuthPage />} />
+        <Route path="/*" element={<MainLayout />} />
+      </Routes>
+    </ErrorBoundary>
   )
 }

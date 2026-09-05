@@ -68,8 +68,12 @@ const settingsSlice = createSlice({
       state.shareData = !state.shareData
       localStorage.setItem('emotionchat_share', state.shareData)
     },
-    // loadSettings is a no-op reducer now; DOM is applied via applyThemeToDom
-    loadSettings: () => {},
+    // No-op action used as a signal in App.jsx to trigger theme application.
+    // The actual state is loaded from localStorage in initialState.
+    // DOM theme application is handled by applyThemeToDom() in App.jsx.
+    loadSettings: (state) => {
+      return state
+    },
   },
   initialState,
 })

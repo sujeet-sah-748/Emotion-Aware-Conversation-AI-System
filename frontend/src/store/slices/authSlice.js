@@ -9,9 +9,10 @@ function loadUserFromStorage() {
   }
 }
 
+const _storedUser = loadUserFromStorage()
 const initialState = {
-  user: loadUserFromStorage(),
-  isAuthenticated: !!loadUserFromStorage(),
+  user: _storedUser,
+  isAuthenticated: !!_storedUser,
   loading: false,
   error: null,
 }

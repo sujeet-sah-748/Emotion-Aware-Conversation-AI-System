@@ -1,9 +1,36 @@
+"""
+final_context_engine.py
+
+Production-grade Context Window + Memory Retriever + Emotion-Aware System for LLM applications.
+
+Architecture:
+    ContextManager            -> high-level orchestrator (write path + read path)
+        ├── ContextWindow     -> token-budgeted prompt assembly with eviction
+        ├── MemoryRetriever   -> hybrid-scored long-term memory (semantic + recency + importance)
+        │       ├── Embedder (Protocol)       -> pluggable embedding model
+        │       └── VectorStore (ABC)         -> pluggable ANN backend
+        ├── EmotionManager    -> IMPORTED from emotion_engine.py (VAD-based affect tracking)
+        │       ├── Situational (seconds)     -> immediate turn-level emotion
+        │       ├── Short-term (minutes)      -> recent conversational mood
+        │       └── Long-term (days/weeks)    -> persistent user trait baseline
+        ├── EmotionalMemoryWriter -> IMPORTED from emotion_engine.py
+        └── TokenCounter (Protocol)           -> pluggable tokenizer
+
+Design goals:
+    - Thread-safe, dependency-free core (stdlib only)
+    - Deterministic fallbacks (heuristic tokenizer, hashing embedder)
+    - Bounded memory: hard token budgets, soft history caps, summarization-on-evict
+    - Observable: structured diagnostics + metrics on every context build
+    - Emotion-aware: affect state injected into every context assembly
+"""
+
 from __future__ import annotations
 
 import hashlib
 import json
 import logging
 import math
+import os
 import re
 import threading
 import time
@@ -14,12 +41,18 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Optional, Protocol, Sequence, runtime_checkable
 
-from emotion_engine import (
+# ═══════════════════════════════════════════════════════════════════════
+# IMPORT EMOTION COMPONENTS FROM emotion_engine.py (SINGLE SOURCE OF TRUTH)
+# ═══════════════════════════════════════════════════════════════════════
+from core.emotion_engine import (
+    VAD,
+    EmotionLabel,
     AffectState,
-    EmotionClassifier,
-    EmotionalMemoryWriter,
     EmotionManager,
-    render_bar,
+    EmotionalMemoryWriter,
+    EmotionSignal,
+    render_affect_line,
+    project_label,
 )
 
 logger = logging.getLogger(__name__)
@@ -181,8 +214,9 @@ class HashingEmbedder:
     """
     Deterministic n-gram hashing embedder (feature hashing + L2 norm).
 
-    Zero-dependency fallback so the system runs standalone. For production,
-    inject a real model (OpenAI text-embedding-3, sentence-transformers, ...).
+    REMOVED FROM PRODUCTION USE. Retained only for unit tests that need
+    a dependency-free embedder. Do NOT use in ChatContextManager.
+    Use SentenceTransformerEmbedder instead.
     """
 
     def __init__(self, dimension: int = 512, ngram_range: tuple[int, int] = (1, 2)) -> None:
@@ -212,6 +246,53 @@ class HashingEmbedder:
             inv = 1.0 / norm
             vec = [v * inv for v in vec]
         return vec
+
+
+class SentenceTransformerEmbedder:
+    """
+    Production semantic embedder using sentence-transformers.
+
+    Understands meaning — 'happy' and 'joyful' will be close in embedding
+    space. Required for vector search to return semantically relevant results.
+
+    HashingEmbedder must NOT be used as a fallback: it hashes strings without
+    understanding meaning, causing vector search to return garbage results
+    silently.
+
+    Install: pip install sentence-transformers
+
+    Args:
+        model_name: HuggingFace model ID. Defaults to a fast, high-quality
+                    384-dim model. Override via EMBEDDER_MODEL env var.
+    """
+
+    DEFAULT_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+
+    def __init__(self, model_name: Optional[str] = None) -> None:
+        resolved = model_name or os.environ.get("EMBEDDER_MODEL", self.DEFAULT_MODEL)
+        try:
+            from sentence_transformers import SentenceTransformer
+            self._model = SentenceTransformer(resolved)
+            self._dim: int = self._model.get_sentence_embedding_dimension()
+        except ImportError as e:
+            raise RuntimeError(
+                "sentence-transformers is required but not installed. "
+                "Install with: pip install sentence-transformers"
+            ) from e
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to load embedding model '{resolved}'. "
+                f"Check EMBEDDER_MODEL env var or model availability. "
+                f"Original error: {e}"
+            ) from e
+
+    @property
+    def dimension(self) -> int:
+        return self._dim
+
+    def embed(self, texts: Sequence[str]) -> list[list[float]]:
+        vectors = self._model.encode(list(texts), show_progress_bar=False)
+        return [v.tolist() for v in vectors]
 
 
 # ---------------------------------------------------------------------------
@@ -288,6 +369,139 @@ class InMemoryVectorStore(VectorStore):
             return len(self._vectors)
 
 
+class ChromaVectorStore(VectorStore):
+    """
+    Production-ready vector store using ChromaDB.
+    
+    ChromaDB provides:
+    - Persistent storage to disk
+    - Efficient ANN search with HNSW
+    - Built-in metadata filtering
+    - Automatic indexing
+    
+    Parameters:
+    - persist_directory: Path to store ChromaDB data (default: ./chroma_db)
+    - collection_name: Name of the collection (default: emotion_memories)
+    """
+
+    def __init__(
+        self,
+        persist_directory: str = "./chroma_db",
+        collection_name: str = "emotion_memories",
+        embedding_dimension: Optional[int] = None,
+    ) -> None:
+        try:
+            import chromadb
+        except ImportError as exc:
+            raise RuntimeError(
+                "ChromaDB is required for ChromaVectorStore. "
+                "Install it with: pip install chromadb"
+            ) from exc
+
+        # BUG FIX #6: chromadb >= 0.4.0 removed the legacy Client(Settings(...))
+        # API.  Use PersistentClient(path=...) for on-disk storage and
+        # EphemeralClient() for in-memory (test) usage instead.
+        try:
+            self._client = chromadb.PersistentClient(
+                path=persist_directory,
+            )
+        except AttributeError:
+            # Fallback for very old chromadb versions still using the old API.
+            from chromadb.config import Settings  # type: ignore[import]
+            self._client = chromadb.Client(  # type: ignore[attr-defined]
+                Settings(
+                    persist_directory=persist_directory,
+                    anonymized_telemetry=False,
+                )
+            )
+
+        # Get or create collection
+        try:
+            self._collection = self._client.get_or_create_collection(
+                name=collection_name,
+                metadata={"hnsw:space": "cosine"},
+            )
+        except Exception:
+            # If collection exists with different settings, get it as-is.
+            self._collection = self._client.get_collection(name=collection_name)
+
+        self._lock = threading.RLock()
+        logger.info(
+            f"ChromaVectorStore initialized: collection='{collection_name}', "
+            f"persist_dir='{persist_directory}', count={self._collection.count()}"
+        )
+
+    def upsert(self, memory_id: str, embedding: Sequence[float], metadata: dict[str, Any]) -> None:
+        with self._lock:
+            # ChromaDB requires string metadata values
+            sanitized_metadata = {
+                k: str(v) if not isinstance(v, (str, int, float, bool)) else v
+                for k, v in metadata.items()
+            }
+            
+            self._collection.upsert(
+                ids=[memory_id],
+                embeddings=[list(embedding)],
+                metadatas=[sanitized_metadata],
+            )
+
+    def search(
+        self,
+        query_embedding: Sequence[float],
+        top_k: int,
+        filter_fn: Optional[Callable[[dict[str, Any]], bool]] = None,
+    ) -> list[tuple[str, float]]:
+        with self._lock:
+            # ChromaDB returns distances, not similarities
+            # For cosine space, distance = 1 - similarity (or 2 - 2*similarity for normalized)
+            # We need to convert back to similarity
+            results = self._collection.query(
+                query_embeddings=[list(query_embedding)],
+                n_results=top_k if filter_fn is None else top_k * 3,  # Overfetch if filtering
+                include=["distances", "metadatas"],
+            )
+            
+            if not results["ids"] or not results["ids"][0]:
+                return []
+            
+            # Extract results
+            ids = results["ids"][0]
+            distances = results["distances"][0]
+            metadatas = results["metadatas"][0]
+            
+            # Convert distances to similarities (for cosine: similarity = 1 - distance)
+            scored: list[tuple[str, float]] = []
+            for memory_id, distance, metadata in zip(ids, distances, metadatas):
+                # Apply filter if provided
+                if filter_fn is not None and not filter_fn(metadata):
+                    continue
+                
+                # Convert distance to similarity
+                similarity = 1.0 - distance
+                scored.append((memory_id, similarity))
+            
+            # Sort by similarity (descending) and limit to top_k
+            scored.sort(key=lambda t: t[1], reverse=True)
+            return scored[:top_k]
+
+    def delete(self, memory_id: str) -> bool:
+        with self._lock:
+            try:
+                # Check if exists
+                existing = self._collection.get(ids=[memory_id])
+                if not existing["ids"]:
+                    return False
+                
+                self._collection.delete(ids=[memory_id])
+                return True
+            except Exception:
+                return False
+
+    def __len__(self) -> int:
+        with self._lock:
+            return self._collection.count()
+
+
 # ---------------------------------------------------------------------------
 # Memory retriever
 # ---------------------------------------------------------------------------
@@ -329,7 +543,9 @@ class MemoryRetriever:
         config: Optional[RetrievalConfig] = None,
     ) -> None:
         self._embedder = embedder
-        self._store = store or InMemoryVectorStore()
+        # BUG FIX #7: accept None and default to InMemoryVectorStore so that
+        # MemoryRetriever.load(..., store=None) doesn't crash on first upsert.
+        self._store: VectorStore = store if store is not None else InMemoryVectorStore()
         self._config = config or RetrievalConfig()
         self._memories: dict[str, Memory] = {}
         self._lock = threading.RLock()
@@ -461,7 +677,7 @@ class ContextBudget:
     reserved_for_response: int = 1024      # headroom for the model's answer
     max_memory_ratio: float = 0.30         # cap on retrieved-memory block
     max_system_ratio: float = 0.25         # guard rail on system prompt size
-    max_affect_ratio: float = 0.05         # cap on the emotional-state block
+    max_affect_ratio: float = 0.05         # cap on emotional-state block
     per_message_overhead: int = 4          # chat-format framing tokens / message
 
     def __post_init__(self) -> None:
@@ -497,8 +713,9 @@ class ContextWindow:
 
     Priority order (highest first):
         1. System prompt   — pinned, truncated only if it breaches its guard rail
-        2. Memory block    — retrieved memories, capped at max_memory_ratio
-        3. Conversation    — filled newest-first; the latest message is always
+        2. Affect block    — emotional state summary, capped at max_affect_ratio
+        3. Memory block    — retrieved memories, capped at max_memory_ratio
+        4. Conversation    — filled newest-first; the latest message is always
                              included (truncated if it alone exceeds the budget)
     """
 
@@ -540,8 +757,7 @@ class ContextWindow:
             used += sys_tokens
         diagnostics["system_tokens"] = used
 
-        # -- 1b. affect block (pinned, small) — diagram step (2)/(4):
-        # dynamic emotional state injected into every context build ----------
+        # -- 2. affect block (pinned, small) ---------------------------------
         affect_tokens = 0
         if affect_block:
             affect_cap = int(budget * self._budget.max_affect_ratio)
@@ -556,7 +772,7 @@ class ContextWindow:
                 affect_tokens = 0
         diagnostics["affect_tokens"] = affect_tokens
 
-        # -- 2. memory block (budget-capped) ----------------------------------
+        # -- 3. memory block (budget-capped) ----------------------------------
         memory_budget = int(budget * self._budget.max_memory_ratio)
         memory_tokens = 0
         memories_used: list[ScoredMemory] = []
@@ -581,7 +797,7 @@ class ContextWindow:
         diagnostics["memories_considered"] = len(memories)
         diagnostics["memories_included"] = len(memories_used)
 
-        # -- 3. conversation history (newest-first fill) ----------------------
+        # -- 4. conversation history (newest-first fill) ----------------------
         remaining = budget - used
         kept: list[Message] = []
         history_tokens = 0
@@ -655,6 +871,7 @@ class Metrics:
     memories_retrieved: int = 0
     history_evictions: int = 0
     summaries_created: int = 0
+    emotional_events_logged: int = 0
     last_context_tokens: int = 0
     last_build_latency_ms: float = 0.0
 
@@ -666,6 +883,7 @@ class Metrics:
             "memories_retrieved": self.memories_retrieved,
             "history_evictions": self.history_evictions,
             "summaries_created": self.summaries_created,
+            "emotional_events_logged": self.emotional_events_logged,
             "last_context_tokens": self.last_context_tokens,
             "last_build_latency_ms": round(self.last_build_latency_ms, 2),
         }
@@ -676,6 +894,21 @@ class Metrics:
 # ---------------------------------------------------------------------------
 
 class ContextManager:
+    """
+    High-level facade combining:
+    - Short-term history (conversation)
+    - Long-term memory (vector-backed retrieval)
+    - Emotion tracking (VAD-based, three-tier) - IMPORTED from emotion_engine.py
+    - Token-budgeted context assembly
+
+    Write path:
+        add_message()  -> append to history; detect emotion; evict if needed
+        remember()     -> explicit long-term memory write
+
+    Read path:
+        build_context() -> retrieve memories + build affect block + assemble prompt
+    """
+
     def __init__(
         self,
         retriever: MemoryRetriever,
@@ -697,9 +930,12 @@ class ContextManager:
         self._history: list[Message] = []
         self._metrics = Metrics()
         self._lock = threading.RLock()
-        # Affective layer — optional so the class still works standalone.
+        
+        # Affective layer — optional so the class still works standalone
         self._emotion_manager = emotion_manager
         self._emotional_writer = emotional_writer
+
+    # -- write path ---------------------------------------------------------
 
     def add_message(
         self,
@@ -711,23 +947,28 @@ class ContextManager:
         if not content:
             raise ValueError("Message content must be non-empty")
         msg = Message(role=role, content=content, metadata=metadata or {})
+        
         with self._lock:
             self._history.append(msg)
             self._metrics.messages_added += 1
             self._enforce_soft_cap_locked()
 
-        # Affective write path — deliberately OUTSIDE self._lock: the
-        # classifier call and any memory write can be slow (network-bound
-        # model call), and EmotionManager guards its own state with its own
-        # lock, so holding two locks here would just serialize unrelated
-        # work for no correctness benefit. process_turn() -> maybe_write()
-        # is diagram steps (1) and (3).
+        # Affective write path — deliberately OUTSIDE self._lock
+        # The classifier call can be slow (network-bound model), and
+        # EmotionManager guards its own state, so no need to hold two locks
         if role == Role.USER and self._emotion_manager is not None:
             k = self._emotion_manager.context_turns
-            recent_turns = self.history[-k:]  # msg is already appended above
+            with self._lock:
+                recent_turns = list(self._history[-k:])
+            
             events = self._emotion_manager.process_turn(msg, recent_turns)
-            if events and self._emotional_writer is not None:
-                self._emotional_writer.maybe_write(events)
+            
+            if events:
+                with self._lock:
+                    self._metrics.emotional_events_logged += len(events)
+                
+                if self._emotional_writer is not None:
+                    self._emotional_writer.maybe_write(events)
 
         return msg
 
@@ -749,6 +990,7 @@ class ContextManager:
         return memory
 
     def _enforce_soft_cap_locked(self) -> None:
+        """Evict oldest history beyond the soft cap; summarize into memory. Caller holds lock."""
         overhead = self._budget.per_message_overhead
         total = sum(self._counter.count(m.content) + overhead for m in self._history)
         if total <= self._soft_cap:
@@ -775,13 +1017,21 @@ class ContextManager:
             except Exception:
                 logger.exception("summarizer failed; evicted history not persisted to memory")
 
+    # -- read path ----------------------------------------------------------
+
     def build_context(
         self,
         query: Optional[str] = None,
         top_k: Optional[int] = None,
         memory_filter: Optional[Callable[[dict[str, Any]], bool]] = None,
     ) -> ContextSnapshot:
+        """
+        Assemble the LLM-ready context.
+
+        Retrieval query defaults to the most recent user message.
+        """
         start = time.perf_counter()
+        
         with self._lock:
             history = list(self._history)
 
@@ -793,17 +1043,24 @@ class ContextManager:
 
         memories = self._retriever.retrieve(query, top_k=top_k, filter_fn=memory_filter)
 
+        # Build affect block if emotion manager is available
         affect_block = None
-        affect: Optional[AffectState] = None
         if self._emotion_manager is not None:
             affect = self._emotion_manager.affect_state()
             affect_block = self._render_affect_block(affect)
 
-        snapshot = self._window.assemble(self._system_prompt, memories, history, affect_block=affect_block)
+        snapshot = self._window.assemble(
+            self._system_prompt, memories, history, affect_block=affect_block
+        )
 
-        if affect is not None:
-            snapshot.diagnostics["emotion_stm_dominant"] = affect.stm_dominant.value
-            snapshot.diagnostics["emotion_stm_intensity"] = affect.stm_intensity
+        # Add emotion diagnostics if available
+        if self._emotion_manager is not None:
+            affect = self._emotion_manager.affect_state()
+            stm_label, stm_intensity = project_label(affect.short_term_vad)
+            ltm_label, _ = project_label(affect.long_term_vad)
+            
+            snapshot.diagnostics["emotion_situational"] = affect.stm_dominant.value
+            snapshot.diagnostics["emotion_short_term"] = stm_label.value
             snapshot.diagnostics["emotion_trend"] = affect.trend
             snapshot.diagnostics["emotion_confidence"] = round(affect.confidence, 3)
 
@@ -822,20 +1079,16 @@ class ContextManager:
 
     @staticmethod
     def _render_affect_block(affect: AffectState) -> str:
-        """Compact prompt-ready summary — NOT a diagnostic claim about the
-        user, just a descriptive, confidence-qualified read for the model
-        to weigh alongside everything else. Kept small on purpose; it
-        competes for budget against max_affect_ratio."""
-        top_situational = sorted(affect.situational_bar.items(), key=lambda kv: -kv[1])[:2]
-        top_stm = sorted(affect.short_term_bar.items(), key=lambda kv: -kv[1])[:2]
-        sit_str = ", ".join(f"{l} {v:.0f}%" for l, v in top_situational if v > 1)
-        stm_str = ", ".join(f"{l} {v:.0f}%" for l, v in top_stm if v > 1)
+        """
+        Compact prompt-ready emotional state summary using the production
+        render_affect_line function from emotion_engine.py.
+        """
         return (
-            "Emotional context (model estimate, not certain fact — weigh accordingly):\n"
-            f"- this turn: {sit_str or 'neutral'}\n"
-            f"- recent mood: {stm_str or 'neutral'} (trend: {affect.trend}, "
-            f"confidence: {affect.confidence:.2f})"
+            "Emotional context (model estimate, not certain fact — weigh accordingly):\n" +
+            render_affect_line(affect)
         )
+
+    # -- introspection --------------------------------------------------------
 
     @property
     def history(self) -> list[Message]:
@@ -846,17 +1099,107 @@ class ContextManager:
     def retriever(self) -> MemoryRetriever:
         return self._retriever
 
+    @property
+    def emotion_manager(self) -> Optional[EmotionManager]:
+        return self._emotion_manager
+
     def metrics(self) -> dict[str, Any]:
         with self._lock:
             snap = self._metrics.snapshot()
         snap["history_messages"] = len(self._history)
         snap["long_term_memories"] = len(self._retriever)
+        if self._emotion_manager is not None:
+            snap["emotional_events"] = len(self._emotion_manager.events())
         return snap
 
-    def reset(self, keep_memories: bool = True) -> None:
+    def reset(self, keep_memories: bool = True, keep_emotions: bool = True) -> None:
         with self._lock:
             self._history.clear()
             self._metrics = Metrics()
+        
         if not keep_memories:
             for m in list(self._retriever._memories.values()):
                 self._retriever.remove(m.memory_id)
+        
+        if not keep_emotions and self._emotion_manager is not None:
+            self._emotion_manager.reset_session()
+
+
+# ---------------------------------------------------------------------------
+# Demo / Example Usage
+# ---------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+
+    print("\n" + "="*70)
+    print("CONTEXT ENGINE - Using emotion_engine.py for emotion tracking")
+    print("="*70 + "\n")
+    
+    # Initialize components
+    # NOTE: Demo uses SentenceTransformerEmbedder + ChromaDB (production stack).
+    # HashingEmbedder and HeuristicTokenCounter are NOT used here.
+    embedder = SentenceTransformerEmbedder()
+    token_counter = TiktokenCounter(model="gpt-4o")
+    
+    # Import and initialize emotion manager from emotion_engine.py
+    from core.emotion_engine import build_emotion_manager
+    
+    emotion_manager = build_emotion_manager()
+    
+    # Initialize ChromaDB vector store (REQUIRED - no in-memory fallback)
+    vector_store = ChromaVectorStore(
+        persist_directory="./test_chroma_db",
+        collection_name="test_memories",
+    )
+    print(f"✅ Using ChromaDB vector store (persistent)")
+    
+    retriever = MemoryRetriever(
+        embedder=embedder,
+        store=vector_store,
+        config=RetrievalConfig(top_k=3, min_score=0.05),
+    )
+    
+    emotional_writer = EmotionalMemoryWriter(
+        retriever=retriever,
+        min_magnitude=0.35,
+        min_confidence=0.55,
+    )
+    
+    # Create context manager with emotion tracking from emotion_engine.py
+    manager = ContextManager(
+        retriever=retriever,
+        token_counter=token_counter,
+        budget=ContextBudget(
+            max_tokens=2048,
+            reserved_for_response=512,
+            max_memory_ratio=0.30,
+            max_affect_ratio=0.05,
+        ),
+        system_prompt="You are an empathetic AI assistant.",
+        summarizer=TruncatingSummarizer(),
+        history_soft_cap_tokens=1000,
+        emotion_manager=emotion_manager,
+        emotional_writer=emotional_writer,
+    )
+    
+    # Example conversation
+    print("\nTurn 1: User expresses emotion")
+    manager.add_user_message("I've been feeling really lonely lately. Nobody seems to understand me.")
+    ctx1 = manager.build_context()
+    print(f"Tokens: {ctx1.total_tokens}/{ctx1.budget_tokens}")
+    print(f"Emotion: {ctx1.diagnostics.get('emotion_short_term', 'N/A')}")
+    print(f"Confidence: {ctx1.diagnostics.get('emotion_confidence', 'N/A')}")
+    print()
+    
+    # Show metrics
+    print("="*70)
+    print("METRICS")
+    print("="*70)
+    metrics = manager.metrics()
+    for key, value in metrics.items():
+        print(f"{key}: {value}")
+    print()
+    
+    print("✅ Successfully using emotion_engine.py as single source of truth!")
+    print(f"✅ Vector store: {type(vector_store).__name__} with {len(vector_store)} vectors")

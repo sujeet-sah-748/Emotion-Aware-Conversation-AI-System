@@ -10,7 +10,11 @@ export default function RegisterForm({ onToggle }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    await register(name, email, password)
+    const success = await register(name, email, password)
+    if (!success) {
+      // Error is already set in Redux state and displayed
+      console.warn('Registration failed')
+    }
   }
 
   return (

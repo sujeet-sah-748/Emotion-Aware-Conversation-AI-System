@@ -3,13 +3,17 @@ import { useAuth } from '../../hooks/useAuth'
 import Icon from '../common/Icon'
 
 export default function LoginForm({ onToggle }) {
-  const [email, setEmail] = useState('alex@emotion.ai')
-  const [password, setPassword] = useState('password123')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const { login, loading, error } = useAuth()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    await login(email, password)
+    const success = await login(email, password)
+    if (!success) {
+      // Error is already set in Redux state and displayed
+      console.warn('Login failed')
+    }
   }
 
   return (

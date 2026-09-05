@@ -75,6 +75,7 @@ export default function MessageBubble({ message, userName }) {
               onClick={handleCopy}
               className="p-1 rounded hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
               title="Copy"
+              aria-label="Copy message"
             >
               <Icon
                 name={copied ? 'check' : 'copy'}
@@ -84,13 +85,13 @@ export default function MessageBubble({ message, userName }) {
             </button>
             {!isUser && (
               <>
-                <button className="p-1 rounded hover:bg-black/5 dark:hover:bg-white/10 transition-colors" title="Like">
+                <button className="p-1 rounded hover:bg-black/5 dark:hover:bg-white/10 transition-colors" title="Like" aria-label="Like message">
                   <Icon name="thumbsUp" size={12} className="text-[var(--text-tertiary)]" />
                 </button>
-                <button className="p-1 rounded hover:bg-black/5 dark:hover:bg-white/10 transition-colors" title="Dislike">
+                <button className="p-1 rounded hover:bg-black/5 dark:hover:bg-white/10 transition-colors" title="Dislike" aria-label="Dislike message">
                   <Icon name="thumbsDown" size={12} className="text-[var(--text-tertiary)]" />
                 </button>
-                <button className="p-1 rounded hover:bg-black/5 dark:hover:bg-white/10 transition-colors" title="Regenerate">
+                <button className="p-1 rounded hover:bg-black/5 dark:hover:bg-white/10 transition-colors" title="Regenerate" aria-label="Regenerate response">
                   <Icon name="rotate" size={12} className="text-[var(--text-tertiary)]" />
                 </button>
               </>

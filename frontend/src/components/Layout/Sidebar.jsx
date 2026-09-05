@@ -38,7 +38,7 @@ export default function Sidebar({ onNavigate }) {
 
   const submitRename = useCallback((e) => {
     // Prevent double-fire: onSubmit + onBlur both call this; bail if already committed
-    if (!renamingId) return
+    if (renamingId === null) return
     if (e?.preventDefault) e.preventDefault()
     if (renameValue.trim()) {
       dispatch(renameChat({ chatId: renamingId, title: renameValue.trim() }))
@@ -104,7 +104,7 @@ export default function Sidebar({ onNavigate }) {
                       autoFocus
                       value={renameValue}
                       onChange={e => setRenameValue(e.target.value)}
-                      onBlur={() => submitRename()}
+                      onBlur={submitRename}
                       className="w-full bg-transparent text-sm outline-none text-[var(--text-primary)]"
                     />
                   </form>
@@ -138,13 +138,13 @@ export default function Sidebar({ onNavigate }) {
             <p className="text-sm font-medium text-[var(--text-primary)] truncate">{user?.name || 'Guest'}</p>
             <p className="text-xs text-[var(--text-muted)] truncate">{user?.email || ''}</p>
           </div>
-          <button onClick={() => onNavigate('settings')} className="icon-btn" title="Settings">
+          <button onClick={() => onNavigate('settings')} className="icon-btn" title="Settings" aria-label="Settings">
             <Icon name="settings" size={16} />
           </button>
-          <button onClick={() => onNavigate('profile')} className="icon-btn" title="Profile">
+          <button onClick={() => onNavigate('profile')} className="icon-btn" title="Profile" aria-label="Profile">
             <Icon name="user" size={16} />
           </button>
-          <button onClick={() => onNavigate('logout')} className="icon-btn" title="Logout">
+          <button onClick={() => onNavigate('logout')} className="icon-btn" title="Logout" aria-label="Logout">
             <Icon name="logout" size={16} />
           </button>
         </div>

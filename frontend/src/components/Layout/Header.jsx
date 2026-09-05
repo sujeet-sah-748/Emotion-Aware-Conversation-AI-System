@@ -12,7 +12,7 @@ export default function Header({ onMenuClick }) {
 
   return (
     <header className="h-14 flex items-center gap-3 px-4 border-b border-[var(--border-color)] bg-[var(--bg-primary)] flex-shrink-0">
-      <button onClick={onMenuClick} className="icon-btn lg:hidden">
+      <button onClick={onMenuClick} className="icon-btn lg:hidden" aria-label="Open menu">
         <Icon name="menu" size={18} />
       </button>
       <h2 className="text-sm font-medium text-[var(--text-primary)] flex-1 truncate">

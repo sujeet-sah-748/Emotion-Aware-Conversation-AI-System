@@ -14,7 +14,7 @@ export function useAuth() {
       return false
     }
     const name = email.split('@')[0].replace(/\b\w/g, l => l.toUpperCase())
-    dispatch(loginSuccess({ id: 'u1', name, email, avatar: name[0] }))
+    dispatch(loginSuccess({ id: `u_${Math.random().toString(36).substring(2, 9)}`, name, email, avatar: name[0] }))
     return true
   }
 
@@ -29,7 +29,7 @@ export function useAuth() {
       dispatch(loginFailure('Password must be at least 4 characters'))
       return false
     }
-    dispatch(registerSuccess({ id: 'u1', name: name.trim(), email, avatar: name[0] }))
+    dispatch(registerSuccess({ id: `u_${Math.random().toString(36).substring(2, 9)}`, name: name.trim(), email, avatar: name[0] }))
     return true
   }
 

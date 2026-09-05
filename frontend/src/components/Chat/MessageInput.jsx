@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { addMessage, createChat } from '../../store/slices/chatSlice'
 import { setCurrentEmotion } from '../../store/slices/emotionSlice'
-import { predictEmotion } from '../../utils/api'
+import { chatWithEmotion } from '../../utils/api'
 import Icon from '../common/Icon'
 
 // ---------------------------------------------------------------------------
@@ -111,6 +111,13 @@ export default function MessageInput({ text, setText }) {
   const [isTyping, setIsTyping]       = useState(false)
   const [backendStatus, setBackendStatus] = useState('unknown') // 'unknown'|'online'|'offline'
   const textareaRef = useRef(null)
+  const isMountedRef = useRef(true)
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -124,56 +131,91 @@ export default function MessageInput({ text, setText }) {
     if (!text.trim() || isTyping) return
 
     const userText = text.trim()
-    setText('')
-    if (textareaRef.current) textareaRef.current.style.height = 'auto'
 
     if (!activeChatId) {
       dispatch(createChat())
       return
     }
 
+    setText('')
+    if (textareaRef.current) textareaRef.current.style.height = 'auto'
+
     // Capture before any awaits — prevents reply landing in the wrong chat
     const targetChatId = activeChatId
     setIsTyping(true)
 
-    // ── Call the backend — it is the sole decider of emotion ────────────────
-    let emotions     = [{ label: 'neutral', score: 1.0 }]
-    let topLabel     = 'neutral'
-    let confidence   = 1.0
+    // ── NEW: Call the enhanced /chat endpoint with full affect tracking ──
+    let emotions = [{ label: 'neutral', score: 1.0 }]
+    let topLabel = 'neutral'
+    let confidence = 1.0
+    let affectState = null
+    let emotionalEvents = []
+    let sessionInfo = null
+    let botResponse = "I'm here and I'm listening."
 
     try {
-      const result = await predictEmotion(userText)
-      emotions   = result.emotions   // [{label, score}, ...] sorted desc by score
-      topLabel   = result.topEmotion // backend's top label — used as-is, no remapping
+      // Use new chatWithEmotion API that returns full affect state
+      const result = await chatWithEmotion(userText, 'default')
+      
+      emotions = result.emotions
+      topLabel = result.topEmotion
       confidence = result.emotions[0]?.score ?? 0.5
+      affectState = result.affectState
+      emotionalEvents = result.emotionalEvents
+      sessionInfo = result.sessionInfo
+      botResponse = result.botResponse
+      
       setBackendStatus('online')
     } catch (err) {
       // Backend unreachable — show offline indicator, keep neutral placeholder
       console.warn('[EmotionChat] Backend unreachable:', err.message)
       setBackendStatus('offline')
+      botResponse = "I'm having trouble connecting right now, but I'm here."
     }
 
-    dispatch(setCurrentEmotion({ emotion: topLabel, confidence }))
+    // Update emotion store with full affect state
+    dispatch(setCurrentEmotion({ 
+      emotion: topLabel, 
+      confidence, 
+      emotions,
+      affectState,
+      emotionalEvents,
+      sessionInfo
+    }))
 
+    // 1. User message
     dispatch(addMessage({
       chatId: targetChatId,
       message: {
         role: 'user',
         text: userText,
-        emotion: topLabel,  // top label from backend, stored as-is
-        emotions,           // full scored array for MessageBubble to render
+        emotion: topLabel,
+        emotions,
+      },
+    }))
+
+    // 2. Prediction card — rendered inline between user message and bot reply
+    dispatch(addMessage({
+      chatId: targetChatId,
+      message: {
+        role: 'prediction',
+        text: '',
+        emotion: topLabel,
+        emotions,
       },
     }))
 
     await new Promise(r => setTimeout(r, 600))
+    if (!isMountedRef.current) return
     setIsTyping(false)
 
-    // Response is purely a function of the backend's top label — no overrides
+    // 3. Bot response (now using affect-aware response from backend)
+    if (!isMountedRef.current) return
     dispatch(addMessage({
       chatId: targetChatId,
       message: {
         role: 'bot',
-        text: getBotResponse(topLabel),
+        text: botResponse,  // Use response from backend
         emotion: 'neutral',
         emotions: [{ label: 'neutral', score: 1.0 }],
       },

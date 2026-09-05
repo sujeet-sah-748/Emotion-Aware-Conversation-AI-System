@@ -1,5 +1,4 @@
 import { useSelector, useDispatch } from 'react-redux'
-import { useEffect } from 'react'
 import {
   setAccentColor,
   toggleDarkMode,
@@ -8,7 +7,6 @@ import {
   toggleMemoryUpdates,
   toggleStoreHistory,
   toggleShareData,
-  applyThemeToDom,
 } from '../../store/slices/settingsSlice'
 import { accentColors } from '../../utils/emotionColors'
 import Icon from '../common/Icon'
@@ -30,11 +28,6 @@ function Toggle({ checked, onChange, label, description }) {
 export default function SettingsPanel({ onBack }) {
   const dispatch = useDispatch()
   const settings = useSelector(state => state.settings)
-
-  // Apply DOM theme changes whenever settings update (keeps reducers pure)
-  useEffect(() => {
-    applyThemeToDom(settings)
-  }, [settings.darkMode, settings.accentColor])
 
   return (
     <div className="flex-1 flex flex-col h-full bg-[var(--bg-primary)]">

@@ -173,12 +173,11 @@ const chatSlice = createSlice({
       const chat = state.chats.find(c => c.id === chatId)
       if (chat) {
         chat.messages.push({
+          ...message,
+          // These always override whatever the caller passed
           id: generateId(),
-          // emotions array from backend (or local fallback): [{label, score}, ...]
-          // emotion string = top label, kept for backwards compat
           emotions: message.emotions || (message.emotion ? [{ label: message.emotion, score: 1.0 }] : [{ label: 'neutral', score: 1.0 }]),
           emotion: message.emotion || message.emotions?.[0]?.label || 'neutral',
-          ...message,
           timestamp: new Date().toISOString(),
         })
         chat.updatedAt = new Date().toISOString()
