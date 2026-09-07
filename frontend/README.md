@@ -1,75 +1,173 @@
-# EmotionChat Frontend
+# Emotion Chatbot — Frontend
 
-Emotion-aware chatbot frontend built with React 18, Redux Toolkit, Tailwind CSS, and Vite.
+React-based chat interface for the emotion-aware chatbot. Displays real-time affect state, manages multiple chat sessions, and communicates with the FastAPI backend.
+
+---
 
 ## Features
 
-- **Authentication** — Login / Register with persistent sessions
-- **Chat History** — Sidebar with searchable conversation list, rename & delete
-- **Emotion Detection** — Real-time emotion badges on messages and header
-- **Hover Actions** — Copy, like, dislike, regenerate on bot messages
-- **Multi-Colour Theme** — 8 accent colors with live switching
-- **Dark Mode** — Full dark/light theme toggle
-- **Settings Panel** — Appearance, notifications, privacy toggles
-- **Profile Panel** — Stats, emotion legend, account management, logout
-- **Responsive** — Mobile-friendly with collapsible sidebar
+- **Emotion-aware chat UI** — message bubbles with emotion context from the backend
+- **3-tier affect visualization** — real-time panel showing Situational, Short-term, and Long-term VAD states as visual bars
+- **Prediction panel** — displays raw emotion classification scores per message
+- **Multi-session management** — sidebar for creating, switching, and managing parallel chat sessions
+- **Auth flow** — login and registration pages with simulated local auth state
+- **Settings panel** — theme and preference controls applied live to the DOM
+- **Profile panel** — user profile view
+- **Responsive layout** — collapsible mobile sidebar with overlay
+- **Error boundary** — graceful top-level error handling with fallback UI
+
+---
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Framework | React 18 |
-| State | Redux Toolkit |
-| Routing | React Router DOM |
-| Styling | Tailwind CSS |
-| Icons | Lucide React |
-| Build | Vite |
+| Tool | Version |
+|---|---|
+| React | 18.3 |
+| Vite | 5.4 |
+| Redux Toolkit | 2.2 |
+| React Router | v6 |
+| Tailwind CSS | 3.4 |
+| Lucide React | 0.436 |
+| date-fns | 3.6 |
 
-## Quick Start
+---
+
+## Prerequisites
+
+- Node.js 18 or later
+- npm 9 or later
+- The backend running at the URL configured in `.env`
+
+---
+
+## Setup and Installation
 
 ```bash
-# Install dependencies
+cd frontend
 npm install
-
-# Start dev server
-npm run dev
-
-# Build for production
-npm run build
 ```
 
-The dev server runs on `http://localhost:5173` with API proxy to `http://localhost:8000`.
+Create a `.env` file in the `frontend/` directory:
+
+```env
+VITE_API_URL=http://localhost:8000
+```
+
+---
+
+## Environment Variables
+
+| Variable | Description | Default |
+|---|---|---|
+| `VITE_API_URL` | Base URL of the FastAPI backend | `http://localhost:8000` |
+
+All Vite environment variables must be prefixed with `VITE_` to be exposed to the browser bundle.
+
+---
+
+## Running in Development
+
+```bash
+npm run dev
+```
+
+The app starts at `http://localhost:5173` with hot module replacement enabled.
+
+---
 
 ## Project Structure
 
 ```
 src/
 ├── components/
-│   ├── Auth/           # LoginForm, RegisterForm
-│   ├── Chat/           # ChatContainer, MessageBubble, MessageInput, EmptyState
-│   ├── Layout/         # Sidebar, Header
-│   ├── Profile/        # ProfilePanel
-│   ├── Settings/       # SettingsPanel
-│   └── common/         # Icon wrapper
-├── hooks/              # useAuth
-├── store/              # Redux store + slices
-├── utils/              # emotionColors, formatters
-├── App.jsx
-├── main.jsx
-└── index.css
+│   ├── Auth/
+│   │   ├── LoginForm.jsx         # Login form with validation
+│   │   └── RegisterForm.jsx      # Registration form
+│   ├── Chat/
+│   │   ├── ChatContainer.jsx     # Main chat view, message list, scroll management
+│   │   ├── MessageBubble.jsx     # Individual message with emotion metadata
+│   │   ├── MessageInput.jsx      # Text input with send handling
+│   │   ├── AffectVisualization.jsx  # 3-tier VAD visualization panel
+│   │   ├── PredictionPanel.jsx   # Raw emotion scores per message
+│   │   └── EmptyState.jsx        # Placeholder shown before first message
+│   ├── Layout/
+│   │   ├── Header.jsx            # Top bar with menu toggle and navigation
+│   │   └── Sidebar.jsx           # Session list, navigation, new chat button
+│   ├── Profile/
+│   │   └── ProfilePanel.jsx      # User profile display and edit
+│   ├── Settings/
+│   │   └── SettingsPanel.jsx     # Theme selector and preferences
+│   └── common/
+│       ├── ErrorBoundary.jsx     # React error boundary wrapper
+│       └── Icon.jsx              # Lucide icon helper component
+├── hooks/
+│   └── useAuth.js                # Auth state selector hook
+├── store/
+│   └── slices/
+│       ├── authSlice.js          # Auth state (isAuthenticated, user)
+│       ├── settingsSlice.js      # Theme, preferences, DOM application
+│       └── chatSlice.js          # Chat sessions, messages, affect state
+├── App.jsx                       # Root component, routing, layout shell
+├── main.jsx                      # React DOM entry point, Redux Provider
+└── index.css                     # Tailwind base + CSS custom properties (theme vars)
 ```
 
-## Emotion Colors
+---
 
-| Emotion | Color |
-|---------|-------|
-| Joy | `#4ade80` |
-| Sadness | `#f87171` |
-| Anger | `#fbbf24` |
-| Fear | `#a78bfa` |
-| Surprise | `#60a5fa` |
-| Stress | `#fb923c` |
-| Anxiety | `#c084fc` |
-| Loneliness | `#94a3b8` |
-| Gratitude | `#34d399` |
-| Neutral | `#9ca3af` |
+## Component Descriptions
+
+### Auth
+- **LoginForm** — email/password form that dispatches to `authSlice`. Simulated auth (no real backend auth endpoint required).
+- **RegisterForm** — registration form, mirrors login flow.
+
+### Chat
+- **ChatContainer** — owns the active session's message list, calls the backend `/chat` endpoint, and manages scroll-to-bottom behavior.
+- **MessageBubble** — renders a single user or assistant message. Optionally shows emotion label and confidence from the backend response.
+- **MessageInput** — controlled textarea with keyboard shortcut (Enter to send, Shift+Enter for newline).
+- **AffectVisualization** — reads the `affect_state` from the latest chat response and renders three sets of VAD bars (Situational, Short-term, Long-term).
+- **PredictionPanel** — displays the ranked emotion scores list (`emotions` array) returned by the backend.
+- **EmptyState** — decorative placeholder with suggested prompts shown when no messages exist yet.
+
+### Layout
+- **Header** — top navigation bar; shows hamburger on mobile, navigation actions (settings, profile, logout).
+- **Sidebar** — lists all chat sessions from the Redux store, highlights the active one, and provides a "New chat" button.
+
+### Common
+- **ErrorBoundary** — class component that catches render errors and displays a fallback UI instead of a blank screen.
+- **Icon** — thin wrapper around `lucide-react` that maps string names to icon components.
+
+---
+
+## Redux Store Slices
+
+### `authSlice`
+Manages authentication state.
+
+| State key | Type | Description |
+|---|---|---|
+| `isAuthenticated` | `boolean` | Whether a user is logged in |
+| `user` | `object \| null` | Current user data |
+
+Actions: `login`, `logout`, `register`
+
+### `settingsSlice`
+Manages UI preferences and theme.
+
+| State key | Type | Description |
+|---|---|---|
+| `theme` | `string` | Active theme name (e.g. `"dark"`, `"light"`) |
+| `...preferences` | `any` | Additional preference keys |
+
+Actions: `loadSettings`, `updateSettings`  
+Helpers: `applyThemeToDom(settings)` — writes CSS custom properties to `:root`
+
+### `chatSlice`
+Manages chat sessions and messages.
+
+| State key | Type | Description |
+|---|---|---|
+| `sessions` | `array` | All chat sessions with metadata |
+| `activeSessionId` | `string \| null` | Currently selected session |
+| `messages` | `object` | Messages keyed by session ID |
+
+Actions: `createSession`, `setActiveSession`, `addMessage`, `deleteSession`
