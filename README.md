@@ -1,91 +1,141 @@
 # An Emotion-Aware Conversational AI system with Tired and Multi-Label Affective Memory
 
-A sophisticated chatbot application that detects and responds to user emotions while maintaining conversation context and memory. This project combines natural language processing with emotional intelligence to create more empathetic and responsive interactions.
+An emotion-aware conversational architecture that integrates fine-grained emotion recognition with hierarchical affect-state tracking, contextual memory, adversarial emotion handling, and emotion-conditioned response generation.
 
-## 🎯 Features
+---
 
-- **Emotion Detection**: Analyzes user messages to identify emotional states (happiness, sadness, anger, surprise, etc.)
-- **Context Memory**: Maintains conversation history for coherent and contextual responses
-- **Intelligent Responses**: Generates empathetic responses based on detected emotions
-- **User-Friendly Interface**: Clean and intuitive frontend for seamless interaction
-- **Scalable Backend**: Robust backend architecture for handling multiple conversations
-
-## 📁 Project Structure
+## Architecture Overview
 
 ```
-Emotion-Aware-Detection-/
-├── backend/          # Backend server and APIs
-├── frontend/         # Frontend user interface
-└── README.md         # Project documentation
+┌─────────────────────────────┐         ┌──────────────────────────────────────┐
+│        Frontend             │  HTTP   │             Backend                  │
+│   React 18 + Vite 5         │ ◄─────► │   FastAPI + Uvicorn (port 8000)      │
+│   Redux Toolkit             │  REST   │   PyTorch LoRA Emotion Classifier    │
+│   Tailwind CSS              │         │   Ollama LLM (phi4-mini, local)      │
+│   Affect Visualization      │         │   Mem0 + Qdrant Memory System        │
+│   Multi-session Chat UI     │         │   Redis Cache                        │
+└─────────────────────────────┘         │   3-Tier Emotion Engine              │
+                                        └──────────────────────────────────────┘
+                                                        │
+                                          ┌─────────────┼─────────────┐
+                                          │             │             │
+                                       Ollama        Qdrant        Redis
+                                    (local LLM)  (vector store)  (cache)
 ```
 
-## 🛠️ Tech Stack
+The frontend sends chat messages to the backend REST API. The backend classifies emotions using a fine-tuned LoRA adapter, updates a 3-tier affect state, retrieves relevant memories from Qdrant via Mem0, builds an emotion-aware prompt, and calls Ollama locally to generate a response. All results — including the full affect state — are returned to the frontend for visualization.
 
-- **Frontend**: Web-based user interface for chatbot interaction
-- **Backend**: Server-side logic for emotion detection and response generation
+---
 
-## 🚀 Getting Started
+## Key Features
+
+- **28-label multi-emotion classification** using a fine-tuned LoRA adapter (PEFT) on top of a HuggingFace transformer
+- **3-tier emotion tracking** — Situational (immediate), Short-term (decaying), and Long-term (persistent) affect states with VAD (Valence-Arousal-Dominance) representation
+- **Intelligent memory** via Mem0 with Qdrant vector store — semantic search over past conversations and emotional events
+- **Local LLM inference** with Ollama (phi4-mini) — no API costs, runs entirely on your machine
+- **Redis caching** for emotion predictions, sessions, context, and memory results
+- **Graceful fallback chain** — every optional component (Ollama, Redis, Qdrant) has a working fallback so the system never hard-crashes
+- **Emotion-aware chat UI** with real-time affect visualization panels
+- **Multi-session management** with per-user session isolation
+- **Auth flow** (login/register) with theme and settings support
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Frontend framework | React 18, Vite 5 |
+| State management | Redux Toolkit |
+| Routing | React Router v6 |
+| Styling | Tailwind CSS |
+| Backend framework | FastAPI, Uvicorn |
+| ML inference | PyTorch, HuggingFace Transformers, PEFT (LoRA) |
+| LLM | Ollama (phi4-mini, local) |
+| Memory system | Mem0, Qdrant |
+| Cache | Redis |
+| Legacy vector store | ChromaDB |
+| Embeddings | nomic-embed-text (via Ollama) |
+
+---
+
+## Quick Start
 
 ### Prerequisites
-- Python 3.8+ (or as per your project requirements)
-- Node.js & npm (for frontend, if applicable)
-- Git
 
-### Installation
+- Python 3.10+
+- Node.js 18+
+- [Ollama](https://ollama.com/) installed and running
+- Redis (optional but recommended)
+- Qdrant (optional, used by Mem0)
 
-1. **Clone the repository**
-   ```bash
-   git clone "---".git
-   cd Emotion-Aware-Detection-
-   ```
+### 1. Clone the repository
 
-2. **Setup Backend**
-   ```bash
-   cd backend
-   # Install dependencies
-   pip install -r requirements.txt
-   ```
+```bash
+git clone <repository-url>
+cd emotion-chatbot-frontend
+```
 
-3. **Setup Frontend** (if applicable)
-   ```bash
-   cd frontend
-   npm install
-   ```
+### 2. Backend setup
 
-### Running the Application
+```bash
+cd backend
+pip install -r requirements.txt
+cp .env.example .env
+# Edit .env with your configuration (Ollama URL, Redis, Qdrant, etc.)
+```
 
-1. **Start the Backend Server**
-   ```bash
-   cd backend
-   python app.py
-   ```
+Pull the required Ollama models:
 
-2. **Start the Frontend** (if applicable)
-   ```bash
-   cd frontend
-   npm start
-   ```
+```bash
+ollama pull phi4-mini
+ollama pull nomic-embed-text
+```
 
-3. **Access the Application**
-   - Open your browser and navigate to `http://localhost:3000` (or your configured port)
+Start the backend:
 
-## 💡 How It Works
+```bash
+python main.py
+# or: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
 
-1. **User Input**: User types a message in the chatbot interface
-2. **Emotion Detection**: The backend analyzes the message to detect emotions
-3. **Context Analysis**: System maintains memory of previous interactions
-4. **Response Generation**: Based on detected emotion and context, the system generates an appropriate response
-5. **Display Response**: The response is displayed to the user in the frontend
+The API will be available at `http://localhost:8000`. Interactive docs at `http://localhost:8000/docs`.
 
-## 📊 Emotion Categories
+### 3. Frontend setup
 
-The chatbot can detect and respond to various emotions:
-- 😊 Happy
-- 😢 Sad
-- 😠 Angry
-- 😲 Surprised
-- 😟 Fearful
-- 😌 Calm
-- And more...
+```bash
+cd ../frontend
+npm install
+cp .env.example .env   # or create .env manually
+# Set VITE_API_URL=http://localhost:8000
+npm run dev
+```
 
+The frontend will be available at `http://localhost:5173`.
+
+---
+
+## Project Structure
+
+```
+emotion-chatbot-frontend/
+├── backend/
+│   ├── core/                   # Emotion engine, context manager
+│   ├── memory/                 # Redis cache, Mem0 integration
+│   ├── response/               # Ollama LLM, response generator
+│   ├── final_adapter/          # LoRA adapter weights
+│   ├── chroma_db/              # ChromaDB persistence (legacy fallback)
+│   ├── main.py                 # FastAPI app and all endpoints
+│   ├── requirements.txt
+│   └── .env.example
+├── frontend/
+│   ├── src/
+│   │   ├── components/         # React components
+│   │   ├── hooks/              # Custom React hooks
+│   │   ├── store/              # Redux slices
+│   │   └── App.jsx
+│   ├── package.json
+│   └── .env
+└── README.md
+```
 
