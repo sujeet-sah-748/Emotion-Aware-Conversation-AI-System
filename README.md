@@ -35,7 +35,7 @@ Emotion-Aware-Detection-/
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/sujeet-sah-748/Emotion-Aware-Detection-.git
+   git clone "---".git
    cd Emotion-Aware-Detection-
    ```
 
