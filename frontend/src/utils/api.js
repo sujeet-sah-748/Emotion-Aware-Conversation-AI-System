@@ -135,3 +135,25 @@ export async function getEmotionalEvents(userId = 'default', limit = 50) {
   
   return await response.json()
 }
+
+/**
+ * Generate a short LLM-based title for a chat from its first message.
+ * Non-throwing — returns null on any error so the caller can fall back.
+ *
+ * @param {string} firstMessage - The user's opening message
+ * @returns {Promise<string|null>}
+ */
+export async function generateChatTitle(firstMessage) {
+  try {
+    const response = await fetch('/api/chat/title', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: firstMessage }),
+    })
+    if (!response.ok) return null
+    const data = await response.json()
+    return data.title || null
+  } catch {
+    return null
+  }
+}

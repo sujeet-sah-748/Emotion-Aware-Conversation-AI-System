@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import { addMessage, createChat } from '../../store/slices/chatSlice'
+import { addMessage, createChat, renameChat } from '../../store/slices/chatSlice'
 import { setCurrentEmotion } from '../../store/slices/emotionSlice'
-import { chatWithEmotion } from '../../utils/api'
+import { chatWithEmotion, generateChatTitle } from '../../utils/api'
 import Icon from '../common/Icon'
 
 // ---------------------------------------------------------------------------
@@ -107,17 +107,10 @@ function getBotResponse(topLabel) {
 // ---------------------------------------------------------------------------
 export default function MessageInput({ text, setText }) {
   const dispatch = useDispatch()
-  const { activeChatId } = useSelector(state => state.chat)
+  const { activeChatId, chats } = useSelector(state => state.chat)
   const [isTyping, setIsTyping]       = useState(false)
   const [backendStatus, setBackendStatus] = useState('unknown') // 'unknown'|'online'|'offline'
   const textareaRef = useRef(null)
-  const isMountedRef = useRef(true)
-
-  useEffect(() => {
-    return () => {
-      isMountedRef.current = false
-    }
-  }, [])
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -144,39 +137,47 @@ export default function MessageInput({ text, setText }) {
     const targetChatId = activeChatId
     setIsTyping(true)
 
-    // ── NEW: Call the enhanced /chat endpoint with full affect tracking ──
+    // Detect whether this is the first user message so we can auto-title the chat.
+    const currentChat = chats?.find(c => c.id === targetChatId)
+    const isFirstMessage = !currentChat?.messages?.some(m => m.role === 'user')
+
     let emotions = [{ label: 'neutral', score: 1.0 }]
     let topLabel = 'neutral'
     let confidence = 1.0
     let affectState = null
     let emotionalEvents = []
     let sessionInfo = null
-    let botResponse = "I'm here and I'm listening."
+    let botResponse = null  // null = not yet resolved
 
     try {
-      // Use new chatWithEmotion API that returns full affect state
       const result = await chatWithEmotion(userText, 'default')
-      
+
       emotions = result.emotions
       topLabel = result.topEmotion
       confidence = result.emotions[0]?.score ?? 0.5
       affectState = result.affectState
       emotionalEvents = result.emotionalEvents
       sessionInfo = result.sessionInfo
-      botResponse = result.botResponse
-      
+      // Use backend Ollama response; fall back only if truly empty
+      botResponse = (result.botResponse && result.botResponse.trim())
+        ? result.botResponse.trim()
+        : null
+
       setBackendStatus('online')
     } catch (err) {
-      // Backend unreachable — show offline indicator, keep neutral placeholder
       console.warn('[EmotionChat] Backend unreachable:', err.message)
       setBackendStatus('offline')
-      botResponse = "I'm having trouble connecting right now, but I'm here."
+    }
+
+    // If backend gave no usable response, fall back to label-based local reply
+    if (!botResponse) {
+      botResponse = getBotResponse(topLabel)
     }
 
     // Update emotion store with full affect state
-    dispatch(setCurrentEmotion({ 
-      emotion: topLabel, 
-      confidence, 
+    dispatch(setCurrentEmotion({
+      emotion: topLabel,
+      confidence,
       emotions,
       affectState,
       emotionalEvents,
@@ -205,21 +206,34 @@ export default function MessageInput({ text, setText }) {
       },
     }))
 
-    await new Promise(r => setTimeout(r, 600))
-    if (!isMountedRef.current) return
-    setIsTyping(false)
+    // Short visual pause so the prediction card renders before the bot reply
+    await new Promise(r => setTimeout(r, 400))
 
-    // 3. Bot response (now using affect-aware response from backend)
-    if (!isMountedRef.current) return
+    // 3. Bot response — always dispatched, no isMountedRef bail-out
+    // (the component never unmounts during a send; the old guard was causing
+    //  silent swallowing of the reply on slow Ollama responses)
     dispatch(addMessage({
       chatId: targetChatId,
       message: {
         role: 'bot',
-        text: botResponse,  // Use response from backend
+        text: botResponse,
         emotion: 'neutral',
         emotions: [{ label: 'neutral', score: 1.0 }],
       },
     }))
+
+    setIsTyping(false)
+
+    // Auto-title the chat on the first message — fire-and-forget so it
+    // doesn't block the response. Updates the sidebar label once Ollama
+    // returns (typically <2s after the chat response has already rendered).
+    if (isFirstMessage) {
+      generateChatTitle(userText).then(title => {
+        if (title) {
+          dispatch(renameChat({ chatId: targetChatId, title }))
+        }
+      })
+    }
   }
 
   const handleKeyDown = (e) => {
